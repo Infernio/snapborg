@@ -96,7 +96,7 @@ def main():
 def list_snapshots(cfg, configs):
     print("Listing snapper snapshots:")
     for config in configs:
-        snapper_config = SnapperConfig.get(config["name"])
+        snapper_config = SnapperConfig.get(config["name"], BorgRepo.create_from_config(config))
         print(f"\tConfig {snapper_config.name} for subvol {snapper_config.get_path()}:")
         snapshots = snapper_config.get_snapshots()
         for s in snapshots:
@@ -169,9 +169,10 @@ def backup_config(config, recreate, dryrun, bind_mount):
     print(f"Backing up snapshots for snapper config '{name}'...")
     snapper_config = None
     snapshots = None
+    repo = BorgRepo.create_from_config(config)
 
     try:
-        snapper_config = SnapperConfig.get(name)
+        snapper_config = SnapperConfig.get(name, repo)
         # when we have the config, extract the snapshots which are not yet backed up
         snapshots = snapper_config.get_snapshots()
         if len(snapshots) == 0:
@@ -180,7 +181,6 @@ def backup_config(config, recreate, dryrun, bind_mount):
     except subprocess.SubprocessError:
         raise Exception(f"Failed to get snapper config {name}!")
 
-    repo = BorgRepo.create_from_config(config)
     # now determine which snapshots need to be backed up
     retention_config = repo.get_retention_config()
     candidates = [
@@ -255,7 +255,8 @@ def clean_snapper(cfg, snapper_configs, dryrun):
     Clean snapper userdata from snapborg specific settings
     """
     for config in snapper_configs:
-        snapper_config = SnapperConfig.get(config["name"])
+        repo = BorgRepo.create_from_config(config)
+        snapper_config = SnapperConfig.get(config["name"], repo)
         snapshots = snapper_config.get_snapshots()
         for s in snapshots:
             s.purge_userdata(dryrun=dryrun)

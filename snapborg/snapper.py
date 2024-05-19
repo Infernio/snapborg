@@ -42,9 +42,10 @@ def run_snapper(args, config: str = None, dryrun=False):
 
 
 class SnapperConfig:
-    def __init__(self, name: str, settings):
+    def __init__(self, name: str, settings, repo):
         self.name = name
         self.settings = settings
+        self.repo = repo
         self._snapshots = None
 
     def is_timeline_enabled(self):
@@ -64,8 +65,8 @@ class SnapperConfig:
         return self._snapshots
 
     @classmethod
-    def get(cls, config_name: str):
-        return cls(config_name, run_snapper(["get-config"], config_name))
+    def get(cls, config_name: str, repo):
+        return cls(config_name, run_snapper(["get-config"], config_name), repo)
     
     @contextmanager
     def prevent_cleanup(self, snapshots=None, dryrun=False):
@@ -86,11 +87,18 @@ class SnapperConfig:
                 s.restore_cleanup_state(dryrun=dryrun)
 
 
+valid_sb_values = {
+    False: {'true', 'local'}, # true for backwards compatibility
+    True:  {'remote'},
+}
+
 class SnapperSnapshot:
     def __init__(self, config: SnapperConfig, info):
         self.config = config
         self.info = info
-        if (info["userdata"] or dict()).get("snapborg_backup") == "true":
+        self._is_remote = config.repo.repopath.startswith("ssh://")
+        sb_backup_val = (info["userdata"] or dict()).get("snapborg_backup")
+        if sb_backup_val in valid_sb_values[self._is_remote]:
             self._is_backed_up = True
         else:
             self._is_backed_up = False
@@ -114,7 +122,7 @@ class SnapperSnapshot:
             self.config.name, dryrun=dryrun)
 
     def set_backed_up(self, dryrun=False):
-        run_snapper(["modify", "--userdata", "snapborg_backup=true",
+        run_snapper(["modify", "--userdata", f"snapborg_backup={'remote' if self._is_remote else 'local'}",
                      f"{self.get_number()}"], self.config.name, dryrun=dryrun)
         self._is_backed_up = True
 
