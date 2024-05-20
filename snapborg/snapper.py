@@ -87,21 +87,18 @@ class SnapperConfig:
                 s.restore_cleanup_state(dryrun=dryrun)
 
 
-valid_sb_values = {
-    False: {'true', 'local'}, # true for backwards compatibility
-    True:  {'remote'},
-}
-
 class SnapperSnapshot:
     def __init__(self, config: SnapperConfig, info):
         self.config = config
         self.info = info
         self._is_remote = config.repo.repopath.startswith("ssh://")
-        sb_backup_val = (info["userdata"] or dict()).get("snapborg_backup")
-        if sb_backup_val in valid_sb_values[self._is_remote]:
+        # true -> local for backwards compatibility
+        sb_backup_vals = (info["userdata"] or dict()).get("snapborg_backup", "").replace("true", "local").split(":")
+        if ("local", "remote")[self._is_remote] in sb_backup_vals:
             self._is_backed_up = True
         else:
             self._is_backed_up = False
+        self._existing_backup_val = ":".join(sb_backup_vals)
         self._cleanup = info["cleanup"]
 
     def get_date(self):
@@ -122,7 +119,10 @@ class SnapperSnapshot:
             self.config.name, dryrun=dryrun)
 
     def set_backed_up(self, dryrun=False):
-        run_snapper(["modify", "--userdata", f"snapborg_backup={'remote' if self._is_remote else 'local'}",
+        new_sb_backup_val = "remote" if self._is_remote else "local"
+        if self._existing_backup_val:
+            new_sb_backup_val = f"{self._existing_backup_val}:{new_sb_backup_val}"
+        run_snapper(["modify", "--userdata", f"snapborg_backup={new_sb_backup_val}",
                      f"{self.get_number()}"], self.config.name, dryrun=dryrun)
         self._is_backed_up = True
 
